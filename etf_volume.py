@@ -127,9 +127,9 @@ def fit(s: str, w: int, right: bool = False) -> str:
 
 def send_table(title: str, rows: list[dict]):
     head = (fit("TICKER", 7) + fit("설명", 16) + fit("RVOL", 6, True) + fit("등락%", 8, True)
-            + fit("위치%", 7, True) + fit("거래대금", 10, True) + "  흐름")
+            + fit("위치%", 7, True) + fit("거래대금", 10, True))
     lines = [fit(r["t"], 7) + fit(r["desc"], 16) + f"{r['rvol']:>6.1f}{r['chg']:>+8.2f}{r['pos']:>7.0f}"
-             f"{money(r['dollar']):>10}  {r['flow']}" for r in rows]
+             f"{money(r['dollar']):>10}" for r in rows]
     first = True
     while lines:
         block, size = [], 0
@@ -180,9 +180,15 @@ def main():
     stage = "장 마감 기준" if elapsed >= SESSION_MIN else f"개장 후 {elapsed // 60}시간 {elapsed % 60}분 경과 ({pct:.0f}%)"
     if hits:
         hits.sort(key=lambda r: -r["rvol"])
-        send_table(f"ETF 특이 거래량 | {session_date} {stage} · 평소 같은 시각 대비 {RVOL_MIN:g}배 이상 {len(hits)}개", hits)
-        post("RVOL = 지금까지 거래량 ÷ 최근 20거래일 같은 시각까지 평균 · 위치% = 당일 저가(0)~고가(100) 중 현재가 위치 · "
-             "흐름: 상승+고가권 = 유입, 하락+저가권 = 이탈")
+        groups = [("유입", "🟢 유입 (상승 + 당일 고가권)"), ("이탈", "🔴 이탈 (하락 + 당일 저가권)"), ("혼조", "⚪ 혼조 (그 외)")]
+        counts = " · ".join(f"{k} {sum(h['flow'] == k for h in hits)}" for k, _ in groups)
+        post(f"**ETF 특이 거래량 | {session_date} {stage}**\n"
+             f"평소 같은 시각 대비 {RVOL_MIN:g}배 이상 {len(hits)}개 ({counts})")
+        for key, title in groups:
+            rows = [h for h in hits if h["flow"] == key]
+            if rows:
+                send_table(title, rows)
+        post("RVOL = 지금까지 거래량 ÷ 최근 20거래일 같은 시각까지 평균 · 위치% = 당일 저가(0)~고가(100) 중 현재가 위치")
     elif FORCE:
         post(f"ETF 특이 거래량 | {session_date} {stage}: {RVOL_MIN:g}배 이상 없음 (확인 {len(results)}개)")
     if missing:
